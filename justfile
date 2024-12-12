@@ -1,0 +1,2 @@
+dev:
+    maturin develop --uv

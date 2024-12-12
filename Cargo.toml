@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "atomatic/rsrc",
+]
+resolver = "2"
+
+[profile.dev]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+debug = false
+codegen-units = 1
