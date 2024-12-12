@@ -1,6 +1,6 @@
 [package]
 name = "atomatic"
-version = "0.4.0"
+version = "0.1.0"
 edition = "2021"
 resolver = "2"
 
@@ -15,3 +15,4 @@ ndarray = { version = "0.16.1", features = ["rayon"] }
 pyo3 = { version = "0.23.3", features = ["extension-module"] }
 numpy = "0.23.0"
 rayon = "1.10.0"
+nalgebra = "0.33.2"
