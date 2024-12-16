@@ -4,7 +4,7 @@ from numba import njit
 
 
 @njit(fastmath=True)
-def find_mic(dr: np.ndarray, cell: np.ndarray, pbc: np.ndarray):
+def find_mic(dr: np.ndarray, cell: np.ndarray, pbc: np.ndarray) -> np.ndarray:
     # Check where distance larger than 1/2 cell. Particles have crossed
     # periodic boundaries then and need to be unwrapped.
     rec = np.linalg.inv(cell)

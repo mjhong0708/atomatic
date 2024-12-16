@@ -1,14 +1,23 @@
+extern crate openblas_src;
 pub mod rmsd;
+pub mod shake;
 pub mod wall;
 
 use pyo3::prelude::*;
-use rmsd::compute_rmsd;
-use wall::log_fermi_spherical_potential;
 
-/// Module definition
 #[pymodule]
-fn _ext(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(compute_rmsd, m)?)?;
-    m.add_function(wrap_pyfunction!(log_fermi_spherical_potential, m)?)?;
-    Ok(())
+mod _ext {
+    use super::*;
+    #[pymodule_export]
+    use super::rmsd::compute_rmsd;
+    #[pymodule_export]
+    use super::wall::log_fermi_spherical_potential;
+
+    #[pymodule]
+    mod shake_utils {
+        #[pymodule_export]
+        use super::super::shake::adjust_positions;
+        #[pymodule_export]
+        use super::super::shake::adjust_momenta;
+    }
 }

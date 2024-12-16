@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from ase import Atoms
 
-from atomatic._ext import compute_rmsd
+from atomatic.geometry.rmsd import compute_rmsd
 
 
 class BiasPotential(ABC):
@@ -63,15 +63,13 @@ class RMSDBiasPotential(BiasPotential):
     def _get_bias_energy_and_force(self, atoms):
         if not self.reference_points:
             return 0, 0
-        R = atoms.get_positions()
 
         E = 0.0
-        F = np.zeros_like(R)
-        k = self.k * R.shape[0]  # k is per atom
+        F = np.zeros_like(atoms.get_positions())
+        k = self.k * F.shape[0]  # k is per atom
         step_count = self._dynamics_step - self._step_offsets
         for atoms_ref, step in zip(self.reference_points, step_count, strict=True):
-            R_ref = atoms_ref.get_positions()
-            rmsd, rmsd_grad, *_ = compute_rmsd(R, R_ref, True)
+            rmsd, rmsd_grad = compute_rmsd(atoms, atoms_ref, True)
             damping_factor = 2 / (1 + np.exp(-self.kappa * (step - 1))) - 1
             if damping_factor > 0:
                 dE = k * np.exp(-self.alpha * rmsd) * damping_factor

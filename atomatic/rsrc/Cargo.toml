@@ -11,8 +11,12 @@ crate-type = ["cdylib"]
 name = "atomatic"
 
 [dependencies]
-ndarray = { version = "0.16.1", features = ["rayon"] }
+ndarray = { version = "0.16.1", features = ["blas", "rayon"] }
 pyo3 = { version = "0.23.3", features = ["extension-module"] }
 numpy = "0.23.0"
 rayon = "1.10.0"
 nalgebra = "0.33.2"
+nshare = { version = "0.10.0", default-features = false, features = ["nalgebra", "ndarray"] }
+blas-src = { version = "0.10", features = ["openblas"] }
+openblas-src = { version = "0.10", features = ["cblas", "static"] }
+nalgebra-lapack = { version = "0.25.0", features = ["openblas"], default-features = false }
