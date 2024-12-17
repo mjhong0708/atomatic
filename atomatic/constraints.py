@@ -1,83 +1,7 @@
 import numpy as np
 from ase.constraints import FixConstraint
-from numba import njit
-
-
-@njit(fastmath=True)
-def find_mic(dr: np.ndarray, cell: np.ndarray, pbc: np.ndarray) -> np.ndarray:
-    # Check where distance larger than 1/2 cell. Particles have crossed
-    # periodic boundaries then and need to be unwrapped.
-    rec = np.linalg.inv(cell)
-
-    pbc = pbc.astype(np.int64)
-    rec *= pbc.reshape(3, 1)
-    dri = np.round(np.dot(dr, rec))
-    # Unwrap
-    return dr - np.dot(dri, cell)
-
-
-@njit(fastmath=True)
-def _adjust_positions(pairs, bondlengths, masses, old, new, maxiter, tolerance, cell, pbc):
-    for _ in range(maxiter):
-        converged = True
-        for i, (a, b) in enumerate(pairs):
-            # Get target bond length
-            target_length = bondlengths[i]
-
-            # Calculate vectors considering MIC
-            r0 = old[a] - old[b]
-            d0 = find_mic(r0, cell, pbc)
-
-            # New displacement including MIC correction
-            d1 = new[a] - new[b] - r0 + d0
-
-            # Calculate mass factor
-            m = 1 / (1 / masses[a] + 1 / masses[b])
-
-            # Calculate correction factor (lambda)
-            x = 0.5 * (target_length**2 - np.dot(d1, d1)) / np.dot(d0, d1)
-
-            if abs(x) > tolerance:
-                # Apply position corrections
-                new[a] += x * m / masses[a] * d0
-                new[b] -= x * m / masses[b] * d0
-                converged = False
-
-        if converged:
-            break
-    else:
-        raise RuntimeError("SHAKE did not converge within maximum iterations")
-
-
-@njit(fastmath=True)
-def _adjust_momenta(pairs, bondlengths, masses, old, momenta, maxiter, tolerance, cell, pbc):
-    for _ in range(maxiter):
-        converged = True
-        for i, (a, b) in enumerate(pairs):
-            # Get current bond vector with MIC
-            d = old[a] - old[b]
-            d = find_mic(d, cell, pbc)
-
-            # Calculate relative velocity
-            dv = momenta[a] / masses[a] - momenta[b] / masses[b]
-
-            # Calculate mass factor
-            m = 1 / (1 / masses[a] + 1 / masses[b])
-
-            # Calculate correction factor
-            x = -np.dot(dv, d) / bondlengths[i] ** 2
-
-            if abs(x) > tolerance:
-                # Apply momentum corrections
-                momenta[a] += x * m * d
-                momenta[b] -= x * m * d
-                converged = False
-
-        if converged:
-            break
-    else:
-        raise RuntimeError("Momentum adjustment did not converge")
-
+from atomatic._ext import shake_utils
+import warnings
 
 class SHAKE(FixConstraint):
     """
@@ -87,7 +11,7 @@ class SHAKE(FixConstraint):
 
     maxiter = 500  # Maximum number of iterations for SHAKE
 
-    def __init__(self, pairs, tolerance=1e-13, bondlengths=None, debug=False):
+    def __init__(self, pairs, tolerance=1e-12, bondlengths=None, debug=False):
         """
         Initialize SHAKE constraint.
 
@@ -122,7 +46,13 @@ class SHAKE(FixConstraint):
             self.bondlengths = self.initialize_bond_lengths(atoms)
         cell = atoms.cell.array
         pbc = atoms.pbc
-        _adjust_positions(self.pairs, self.bondlengths, masses, old, new, self.maxiter, self.tolerance, cell, pbc)
+        n_iter, new_adjusted = shake_utils.adjust_positions(
+            old, new, cell, pbc, masses, self.pairs, self.bondlengths, self.maxiter, self.tolerance, False
+        )
+        new[:] = new_adjusted
+        del new_adjusted
+        if n_iter == self.maxiter:
+            warnings.warn("SHAKE did not converge after {} iterations".format(self.maxiter))
 
     def adjust_momenta(self, atoms, momenta):
         """
@@ -140,7 +70,13 @@ class SHAKE(FixConstraint):
 
         cell = atoms.cell.array
         pbc = atoms.pbc
-        _adjust_momenta(self.pairs, self.bondlengths, masses, old, momenta, self.maxiter, self.tolerance, cell, pbc)
+        n_iter, momenta_adjusted = shake_utils._adjust_momenta(
+            old, momenta, cell, pbc, masses, self.pairs, self.bondlengths, self.maxiter, self.tolerance, False
+        )
+        momenta[:] = momenta_adjusted
+        del momenta_adjusted
+        if n_iter == self.maxiter:
+            warnings.warn("SHAKE did not converge after {} iterations".format(self.maxiter))
 
     def adjust_forces(self, atoms, forces):
         """
@@ -185,12 +121,12 @@ class SHAKE(FixConstraint):
             atoms: ASE Atoms object
             ind: New indices
         """
-        map = np.zeros(len(atoms), int)
-        map[ind] = 1
-        n = map.sum()
-        map[:] = -1
-        map[ind] = range(n)
-        pairs = map[self.pairs]
+        mapping = np.zeros(len(atoms), int)
+        mapping[ind] = 1
+        n = mapping.sum()
+        mapping[:] = -1
+        mapping[ind] = range(n)
+        pairs = mapping[self.pairs]
         self.pairs = pairs[(pairs != -1).all(1)]
         if len(self.pairs) == 0:
             raise IndexError("Constraint not part of slice")
